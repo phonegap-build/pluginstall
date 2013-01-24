@@ -8,6 +8,7 @@
 
     <asset src="www/childbrowser.js" target="childbrowser.js" />
     <asset src="www/childbrowser" target="childbrowser" />
+    <asset src="www/does_not_exist.js" target="childbrowser" />
 
 	<access origin="build.phonegap.com" />
 	<access origin="s3.amazonaws.com" />
@@ -57,6 +58,7 @@
 
         <resource-file src="ChildBrowser.bundle" />
         <resource-file src="ChildBrowserViewController.xib" />
+        <resource-file src="does_not_exist.xib" />
 
         <header-file src="ChildBrowserCommand.h" />
         <header-file src="ChildBrowserViewController.h" />

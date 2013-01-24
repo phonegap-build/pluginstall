@@ -161,7 +161,7 @@ exports['should edit the pbxproj file'] = function (test) {
         xcode.project(projPath).parse(function (err, obj) {
             var fileRefSection = obj.project.objects['PBXFileReference'],
                 fileRefLength = Object.keys(fileRefSection).length,
-                EXPECTED_TOTAL_REFERENCES = 96; // magic number ahoy!
+                EXPECTED_TOTAL_REFERENCES = 98; // magic number ahoy!
 
             test.equal(fileRefLength, EXPECTED_TOTAL_REFERENCES);
             test.done();
