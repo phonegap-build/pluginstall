@@ -104,7 +104,6 @@ exports.installPlugin = function (config, plugin, callback) {
         callbackCount++; // for writing the pbxproj file
 
         end = nCallbacks(callbackCount, function(err) {
-          if (err) throw err;
 
           for (key in config.variables) {
             searchAndReplace(config.projectPath + '/**/{PhoneGap,Cordova}.plist', 
