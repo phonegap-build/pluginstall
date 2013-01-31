@@ -2,12 +2,10 @@ var fs = require('../util/fs'), // use existsSync in 0.6.x
     path = require('path'),
     mkdirp = require('mkdirp'),
     et = require('elementtree'),
-
     nCallbacks = require('../util/ncallbacks'),
     asyncCopy = require('../util/asyncCopy'),
-    equalNodes = require('../util/equalNodes'),
+    xmlHelper = require('../util/xml-helpers'),
     getConfigChanges = require('../util/config-changes'),
-
     searchAndReplace = require('../util/searchAndReplace'),
     assetsDir = 'assets/www', // relative path to project's web assets
     sourceDir = 'src',
@@ -20,9 +18,7 @@ exports.installPlugin = function (config, plugin, callback) {
         sourceFiles = platformTag.findall('./source-file'),
         libFiles = platformTag.findall('./library-file'),
         PACKAGE_NAME = packageName(config),
-
         configChanges = getConfigChanges(platformTag),
-
         callbackCount = assets.length + sourceFiles.length + libFiles.length,
         endCallback;
 
@@ -104,14 +100,14 @@ exports.installPlugin = function (config, plugin, callback) {
     // edit configuration files
     Object.keys(configChanges).forEach(function (filename) {
         var filepath = path.resolve(config.projectPath, filename),
-            xmlDoc = readAsETSync(filepath),
+            xmlDoc = xmlHelper.readAsETSync(filepath),
             output;
 
         configChanges[filename].forEach(function (configNode) {
             var selector = configNode.attrib["parent"],
                 children = configNode.findall('*');
 
-            if (!addToDoc(xmlDoc, children, selector)) {
+            if (!xmlHelper.addToDoc(xmlDoc, children, selector)) {
                 endCallback('failed to add children to ' + filename);
             }
         });
@@ -126,61 +122,11 @@ exports.installPlugin = function (config, plugin, callback) {
     });
 }
 
-// adds nodes to doc at selector
-function addToDoc(doc, nodes, selector) {
-    var ROOT = /^\/([^\/]*)/,
-        ABSOLUTE = /^\/([^\/]*)\/(.*)/,
-        parent, tagName, subSelector;
+function packageName(config) {
+    var mDoc = xmlHelper.readAsETSync(
+            path.resolve(config.projectPath, 'AndroidManifest.xml'));
 
-    // handle absolute selector (which elementtree doesn't like)
-    if (ROOT.test(selector)) {
-        tagName = selector.match(ROOT)[1];
-        if (tagName === doc._root.tag) {
-            parent = doc._root;
-
-            // could be an absolute path, but not selecting the root
-            if (ABSOLUTE.test(selector)) {
-                subSelector = selector.match(ABSOLUTE)[2];
-                parent = parent.find(subSelector)
-            }
-        } else {
-            return false;
-        }
-    } else {
-        parent = doc.find(selector)
-    }
-
-    nodes.forEach(function (node) {
-        // check if child is unique first
-        if (uniqueChild(node, parent)) {
-            parent.append(node);
-        }
-    });
-
-    return true;
-}
-
-function uniqueChild(node, parent) {
-    var matchingKids = parent.findall(node.tag),
-        i = 0;
-
-    if (matchingKids.length == 0) {
-        return true;
-    } else  {
-        for (i; i < matchingKids.length; i++) {
-            if (equalNodes(node, matchingKids[i])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-}
-
-function readAsETSync(filename) {
-    var contents = fs.readFileSync(filename, 'utf-8');
-
-    return new et.ElementTree(et.XML(contents));
+    return mDoc._root.attrib['package'];
 }
 
 function srcPath(pluginPath, filename) {
@@ -191,11 +137,4 @@ function srcPath(pluginPath, filename) {
     } else {
         return path.resolve(pluginPath, 'src/android', filename);
     }
-}
-
-function packageName(config) {
-    var mDoc = readAsETSync(
-            path.resolve(config.projectPath, 'AndroidManifest.xml'));
-
-    return mDoc._root.attrib['package'];
 }

@@ -3,7 +3,8 @@ var fs = require('fs'),
     rimraf = require('rimraf'),
     plist = require('plist'),
     xcode = require('xcode'),
-
+    et = require('elementtree'),
+    
     pluginstall = require('../pluginstall'),
     ios = require('../platforms/ios'),
     nCallbacks = require('../util/ncallbacks'),
@@ -38,7 +39,7 @@ function unlinkIfThere(filepath, cb) {
 }
 
 function clean(calllback) {
-    var ASYNC_OPS = 10,
+    var ASYNC_OPS = 14,
         end = nCallbacks(ASYNC_OPS, calllback);
 
     rimraf(assetsDir + '/childbrowser', end)
@@ -56,6 +57,7 @@ function clean(calllback) {
     moveProjFile('SampleApp/PhoneGap.orig.plist', config.projectPath, end);
     moveProjFile('SampleApp/SampleApp-Info.orig.plist', config.projectPath, end);
     moveProjFile('SampleApp.xcodeproj/project.orig.pbxproj', config.projectPath, end);
+    moveProjFile('SampleApp/config.orig.xml', config.projectPath, end);
 }
 
 function nonComments(obj) {
@@ -137,6 +139,25 @@ exports['should edit PhoneGap.plist'] = function (test) {
             test.equal(obj.ExternalHosts[1], "s3.amazonaws.com")
             test.done();
         });
+    })
+}
+
+exports['should edit config.xml'] = function (test) {
+    ios.installPlugin(config, plugin, function (err) {
+        var configPath = config.projectPath + '/SampleApp/config.xml';
+        var configTxt = fs.readFileSync(configPath, 'utf-8'),
+            configDoc = new et.ElementTree(et.XML(configTxt));
+            
+        
+        test.ok(configDoc.find('plugins/plugin[@name="ChildBrowser"]' +
+          '[@value="com.phonegap.plugins.childBrowser.ChildBrowser.723658"]'));
+        var externalHosts = configDoc.findall('access')
+        test.equal(externalHosts.length, 3);
+        test.equal(externalHosts[0].attrib.origin, "existing.com");
+        test.equal(externalHosts[1].attrib.origin, "build.phonegap.com");
+        test.equal(externalHosts[2].attrib.origin, "s3.amazonaws.com");
+
+        test.done();
     })
 }
 

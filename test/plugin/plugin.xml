@@ -65,11 +65,16 @@
         <header-file src="preserveDirs/PreserveDirsTest.h" preserve-dirs="true" />
         <header-file src="TargetDirTest.h" target-dir="targetDir"/>
 
-        <config-file parent="AppId">
+        <config-file target="config.xml" parent="/cordova/plugins">
+            <plugin name="ChildBrowser"
+                value="com.phonegap.plugins.childBrowser.ChildBrowser.$APP_ID"/>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="AppId">
             <string>$APP_ID</string>
         </config-file>
         
-        <config-file parent="CFBundleURLTypes">
+        <config-file target="*-Info.plist" parent="CFBundleURLTypes">
             <array>
               <dict>
                 <key>PackageName</key>
