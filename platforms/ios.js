@@ -7,7 +7,9 @@ var path = require('path'),
     plist = require('plist'),
     nCallbacks = require('../util/ncallbacks'),
     asyncCopy = require('../util/asyncCopy'),
+    getConfigChanges = require('../util/config-changes'),
     searchAndReplace = require('../util/searchAndReplace'),
+    xmlHelper = require('../util/xml-helpers'),
     assetsDir = 'www'; // relative path to project's web assets
 
 exports.installPlugin = function (config, plugin, callback) {
@@ -22,7 +24,7 @@ exports.installPlugin = function (config, plugin, callback) {
             });
 
         // grab and parse pbxproj
-        glob(config.projectPath + '/**/project.pbxproj', function (err, files) {
+        glob(config.projectPath + '/*/project.pbxproj', function (err, files) {
             if (!files.length) throw "does not appear to be an xcode project";
 
             files = files.filter(function (val) {
@@ -34,8 +36,7 @@ exports.installPlugin = function (config, plugin, callback) {
             store.xcodeproj.parse(end);
         });
 
-        // grab and parse cordova plist file
-        glob(config.projectPath + '/**/{PhoneGap,Cordova}.plist', function (err, files) {
+        glob(config.projectPath + '/*/{PhoneGap,Cordova}.plist', function (err, files) {
             if (!files.length) throw "does not appear to be a PhoneGap project";
 
             files = files.filter(function (val) {
@@ -52,7 +53,7 @@ exports.installPlugin = function (config, plugin, callback) {
         });
         
         // grab and parse project plist file
-        glob(config.projectPath + '/**/*-Info.plist', function (err, files) {
+        glob(config.projectPath + '/*/*-Info.plist', function (err, files) {
             if (!files.length) throw "does not appear to be a PhoneGap project";
 
             files = files.filter(function (val) {
@@ -90,7 +91,7 @@ exports.installPlugin = function (config, plugin, callback) {
             resourceFiles = platformTag.findall('./resource-file'),
             frameworks = platformTag.findall('./framework'),
             plistEle = platformTag.find('./plugins-plist'),
-            configFiles = platformTag.findall('./config-file'),
+            configChanges = getConfigChanges(platformTag),
             callbackCount = 0, end;
 
         // callback for every file/dir to add
@@ -98,20 +99,22 @@ exports.installPlugin = function (config, plugin, callback) {
         callbackCount += sourceFiles.length;
         callbackCount += headerFiles.length;
         callbackCount += resourceFiles.length;
-        // adding framework is sync, so don't add that
-        callbackCount++; // for writing the cordova plist file
-        callbackCount++; // for writing the project plist file
+        callbackCount += Object.keys(configChanges).length;
         callbackCount++; // for writing the pbxproj file
 
         end = nCallbacks(callbackCount, function(err) {
           if (err) throw err;
 
           for (key in config.variables) {
-            searchAndReplace(config.projectPath + '/**/{PhoneGap,Cordova}.plist', 
+            searchAndReplace(config.projectPath + '/*/{PhoneGap,Cordova}.plist', 
               '\\$' + key,
               config.variables[key]
             );
-            searchAndReplace(config.projectPath + '/**/*-Info.plist', 
+            searchAndReplace(config.projectPath + '/*/*-Info.plist', 
+              '\\$' + key,
+              config.variables[key]
+            );
+            searchAndReplace(config.projectPath + '/*/config.xml', 
               '\\$' + key,
               config.variables[key]
             );
@@ -181,44 +184,121 @@ exports.installPlugin = function (config, plugin, callback) {
             var opt = { weak: (weak && weak.toLowerCase() == 'true') };
             xcodeproj.addFramework(src, opt);
         });
-        
-        // weirdness with node-plist and top-level <plist>
-        if (plistObj[0]) plistObj = plistObj[0];
-        if (cordovaPListObj[0]) cordovaPListObj = cordovaPListObj[0];
 
+        // handle cordova plist (DEPRECATED CORDOVA 2.3+)
+        if (cordovaPListObj) {
+
+          if (cordovaPListObj[0]) cordovaPListObj = cordovaPListObj[0];
+          
+          hosts.forEach(function(host) {
+            cordovaPListObj.ExternalHosts.push(host.attrib['origin']);
+          });
+
+          // add plugin to cordova plist
+          if (plistEle)
+            cordovaPListObj.Plugins[plistEle.attrib['key']] = plistEle.attrib['string'];
+
+          // write out cordova plist
+          fs.writeFileSync(cordovaPListPath, plist.stringify(cordovaPListObj));
+        }
+        
+        var files = glob.sync(config.projectPath + '/*/config.xml');
+        if (files.length>0) {
+          var xmlDoc = xmlHelper.readAsETSync(files[0]),
+              selector = "./";
+              
+          if (!xmlHelper.addToDoc(xmlDoc, hosts, selector)) {
+            throw 'failed to add children to ' + filename;
+          }
+          
+          output = xmlDoc.write({indent: 4});
+          fs.writeFileSync(files[0], output);
+        }
+
+        // add package name to variables for substitution
+        if (plistObj[0]) plistObj = plistObj[0];
         config.variables["PACKAGE_NAME"] = plistObj.CFBundleIdentifier;
 
-        // add hosts to whitelist (ExternalHosts) in cordova plist
-        hosts.forEach(function(host) {
-          cordovaPListObj.ExternalHosts.push(host.attrib['origin']);
-        });
-        
-        // add plugin to cordova plist
-        cordovaPListObj.Plugins[plistEle.attrib['key']] = plistEle.attrib['string'];
-        
-        // write out cordova plist
-        fs.writeFile(cordovaPListPath, plist.stringify(cordovaPListObj), end);
-        
-        // add config-file items
-        configFiles.forEach(function (configFile) {
-          var parent = configFile.attrib['parent'],
-              text = et.tostring(configFile.find("./*"), { xml_declaration:false });
-
-          plist.parseString(text, function(err, obj) {
-            if (err) throw err
+        // add config-file item to files
+        Object.keys(configChanges).forEach(function (filenameGlob) {
+          
+          // TO FIX: assuming only one file match!!!!! (cos im lazy)
+          var files = glob.sync(config.projectPath + '/*/' + filenameGlob);
+          if (files.length) {
+            var filename = files[0];
+          
+            if (/.plist$/i.test(filename)) {
+              appendToPList(filename, configChanges[filenameGlob], end);
             
-            var node = plistObj[parent]
-            if (node && Array.isArray(node) && Array.isArray(obj))
-              plistObj[parent] = node.concat(obj);
-            else
-              plistObj[parent] = obj;
-          });
+            } else if (/.xml$/i.test(filename)) {
+              appendToXML(filename, configChanges[filenameGlob], end);
+            
+            } else {
+              end("unsupported configuration file type:"+filename);
+            
+            }
+          }
+          else 
+            end();
+          
         });
-        
-        // write out project plist
-        fs.writeFile(plistPath, plist.stringify(plistObj), end);
 
         // write out xcodeproj file
         fs.writeFile(pbxPath, xcodeproj.writeSync(), end);
     });
 }
+
+function appendToXML(filename, configNodes, end){
+  var xmlDoc = xmlHelper.readAsETSync(filename),
+      output;
+
+  configNodes.forEach(function (configNode) {
+    var selector = configNode.attrib["parent"],
+        children = configNode.findall('*');
+
+    if (!xmlHelper.addToDoc(xmlDoc, children, selector)) {
+      end('failed to add children to ' + filename);
+    }
+  });
+
+  output = xmlDoc.write({indent: 4});
+
+  fs.writeFile(filename, output, function (err) {
+    if (err) end(err);
+
+    end();
+  });
+  
+}
+
+function appendToPList(filename, configNodes, end){
+
+  plist.parseFile(filename, function (err, plistObj) {
+    if (err) end(err);
+    
+    if (plistObj[0]) plistObj = plistObj[0];
+
+    configNodes.forEach(function (configNode) {
+      var parent = configNode.attrib['parent'],
+          text = et.tostring(configNode.find("./*"), { xml_declaration:false });
+        
+      plist.parseString(text, function(err, obj) {
+        if (err) end(err);
+
+        var node = plistObj[parent]
+        if (node && Array.isArray(node) && Array.isArray(obj))
+          plistObj[parent] = node.concat(obj);
+        else
+          plistObj[parent] = obj;
+      });
+    
+    });
+
+    fs.writeFile(filename, plist.stringify(plistObj), function (err) {
+      if (err) end(err);
+
+      end();
+    });
+  });
+}
+
