@@ -20,7 +20,7 @@ exports.installPlugin = function (config, plugin, callback) {
 
                 else
                     then(store.pbxPath, store.xcodeproj, store.cordovaPListPath,
-                        store.cordovaPList, store.plistPath, store.plist, store.pluginsDir);
+                        store.cordovaPList, store.plistPath, store.plist, store.pluginsDir, store.xcodeProjectPath);
             });
 
         // grab and parse pbxproj
@@ -61,6 +61,7 @@ exports.installPlugin = function (config, plugin, callback) {
             });
 
             store.plistPath = files[0];
+            store.xcodeProjectPath = path.dirname(files[0]);
 
             plist.parseFile(store.plistPath, function (err, obj) {
                 store.plist = obj;
@@ -82,7 +83,7 @@ exports.installPlugin = function (config, plugin, callback) {
         }
     }
 
-    prepare(function (pbxPath, xcodeproj, cordovaPListPath, cordovaPListObj, plistPath, plistObj, pluginsDir) {
+    prepare(function (pbxPath, xcodeproj, cordovaPListPath, cordovaPListObj, plistPath, plistObj, pluginsDir, xcodeProjectPath) {
         var assets = plugin.xmlDoc.findall('./asset'),
             hosts = plugin.xmlDoc.findall('./access'),
             platformTag = plugin.xmlDoc.find('./platform[@name="ios"]'),
@@ -106,15 +107,15 @@ exports.installPlugin = function (config, plugin, callback) {
           if (err) throw err;
 
           for (key in config.variables) {
-            searchAndReplace(config.projectPath + '/*/{PhoneGap,Cordova}.plist', 
+            searchAndReplace(xcodeProjectPath + '/{PhoneGap,Cordova}.plist', 
               '\\$' + key,
               config.variables[key]
             );
-            searchAndReplace(config.projectPath + '/*/*-Info.plist', 
+            searchAndReplace(xcodeProjectPath + '/*-Info.plist', 
               '\\$' + key,
               config.variables[key]
             );
-            searchAndReplace(config.projectPath + '/*/config.xml', 
+            searchAndReplace(xcodeProjectPath + '/config.xml', 
               '\\$' + key,
               config.variables[key]
             );
@@ -202,8 +203,9 @@ exports.installPlugin = function (config, plugin, callback) {
           fs.writeFileSync(cordovaPListPath, plist.stringify(cordovaPListObj));
         }
         
-        var files = glob.sync(config.projectPath + '/*/config.xml');
-        if (files.length>0) {
+        var files = glob.sync(xcodeProjectPath + '/config.xml');
+
+        if (files.length) {
           var xmlDoc = xmlHelper.readAsETSync(files[0]),
               selector = "./";
               
@@ -223,7 +225,7 @@ exports.installPlugin = function (config, plugin, callback) {
         Object.keys(configChanges).forEach(function (filenameGlob) {
           
           // TO FIX: assuming only one file match!!!!! (cos im lazy)
-          var files = glob.sync(config.projectPath + '/*/' + filenameGlob);
+          var files = glob.sync(xcodeProjectPath + '/' + filenameGlob);
           if (files.length) {
             var filename = files[0];
           
