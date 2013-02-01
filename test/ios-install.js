@@ -142,6 +142,14 @@ exports['should edit PhoneGap.plist'] = function (test) {
     })
 }
 
+exports['should work without PhoneGap.plist'] = function (test) {
+    unlinkIfThere(config.projectPath + '/SampleApp/PhoneGap.plist', function () {
+      ios.installPlugin(config, plugin, function (err) {
+        test.done();
+      })
+    });
+}
+
 exports['should edit config.xml'] = function (test) {
     ios.installPlugin(config, plugin, function (err) {
         var configPath = config.projectPath + '/SampleApp/config.xml';

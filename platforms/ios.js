@@ -37,14 +37,18 @@ exports.installPlugin = function (config, plugin, callback) {
         });
 
         glob(config.projectPath + '/*/{PhoneGap,Cordova}.plist', function (err, files) {
-            if (!files.length) throw "does not appear to be a PhoneGap project";
 
             files = files.filter(function (val) {
                 return !(/^build\//.test(val))
             });
+            
+            if (!files.length) {
+              end();
+              return;
+            }
 
             store.cordovaPListPath = files[0];
-            store.pluginsDir = path.resolve(files[0], '..', 'Plugins');
+            
 
             plist.parseFile(store.cordovaPListPath, function (err, obj) {
                 store.cordovaPList = obj;
@@ -62,7 +66,8 @@ exports.installPlugin = function (config, plugin, callback) {
 
             store.plistPath = files[0];
             store.xcodeProjectPath = path.dirname(files[0]);
-
+            store.pluginsDir = path.resolve(files[0], '..', 'Plugins');
+            
             plist.parseFile(store.plistPath, function (err, obj) {
                 store.plist = obj;
                 end();
